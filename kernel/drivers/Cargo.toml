@@ -6,5 +6,3 @@ edition = "2018"
 
 [dependencies]
 kernel = { path = "../../tock/kernel" }
-enum_primitive = { path = "../../tock/libraries/enum_primitive" }
-tickv = { path = "../../tock/libraries/tickv" }
