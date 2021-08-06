@@ -4,6 +4,6 @@
 #include "dots_text_display.h"
 
 int main(void) {
-  display_text ("0");
+  display_text ("987654321");
   return 0;
 }
