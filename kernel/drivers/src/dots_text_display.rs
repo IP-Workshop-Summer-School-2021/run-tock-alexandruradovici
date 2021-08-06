@@ -3,8 +3,12 @@ use kernel::process::{Error, ProcessId};
 use kernel::syscall::{CommandReturn, SyscallDriver};
 use kernel::{debug, ErrorCode};
 use kernel::hil::time::{Alarm, AlarmClient, ConvertTicks};
+use kernel::grant::Grant;
 
 pub const DRIVER_NUM: usize = 0xa0002;
+
+#[derive(Default)]
+pub struct AppData {}
 
 const DIGITS: [u32; 10] = [
     // 0
@@ -31,16 +35,17 @@ const DIGITS: [u32; 10] = [
 
 pub struct DotsTextDisplay<'a, L: Led, A: Alarm<'a>> {
     leds: &'a [&'a L; 25],
-    alarm: &'a A
+    alarm: &'a A,
+    app_data: Grant<AppData, 1>,
 }
 
 impl<'a, L: Led, A: Alarm<'a>> DotsTextDisplay<'a, L, A> {
-    pub fn new(leds: &'a [&'a L; 25], alarm: &'a A) -> DotsTextDisplay<'a, L, A> {
+    pub fn new(leds: &'a [&'a L; 25], alarm: &'a A, app_data: Grant<AppData, 1>) -> DotsTextDisplay<'a, L, A> {
         // if leds.len() != 25 {
         //     panic! ("DotsTextDisplay needs a slice of 25 LEDs, you supplied {}", leds.len());
         // }
 
-        DotsTextDisplay { leds, alarm }
+        DotsTextDisplay { leds, alarm, app_data }
     }
 
     pub fn set_timeout (&self) {
@@ -74,23 +79,23 @@ impl<'a, L: Led, A: Alarm<'a>> SyscallDriver for DotsTextDisplay<'a, L, A> {
         match command_num {
             0 => CommandReturn::success(),
             // print digit
-            1 => match char::from_u32(r2 as u32) {
-                Some(digit) => {
-                    if digit >= '0' && digit <= '9' {
-                        self.display (digit);
-                        CommandReturn::success()
-                    } else {
-                        CommandReturn::failure(ErrorCode::INVAL)
-                    }
-                }
-                None => CommandReturn::failure(ErrorCode::INVAL),
-            },
+            // 1 => match char::from_u32(r2 as u32) {
+            //     Some(digit) => {
+            //         if digit >= '0' && digit <= '9' {
+            //             self.display (digit);
+            //             CommandReturn::success()
+            //         } else {
+            //             CommandReturn::failure(ErrorCode::INVAL)
+            //         }
+            //     }
+            //     None => CommandReturn::failure(ErrorCode::INVAL),
+            // },
             _ => CommandReturn::failure(ErrorCode::NOSUPPORT),
         }
     }
 
-    fn allocate_grant(&self, _process_id: ProcessId) -> Result<(), Error> {
-        Ok(())
+    fn allocate_grant(&self, process_id: ProcessId) -> Result<(), Error> {
+        self.app_data.enter(process_id, |_, _| {})
     }
 }
 

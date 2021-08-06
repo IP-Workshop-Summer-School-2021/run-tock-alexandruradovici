@@ -631,6 +631,11 @@ pub unsafe fn main() {
         capsules::virtual_alarm::VirtualMuxAlarm::new(mux_alarm)
     );
 
+    let app_data = board_kernel.create_grant(
+        drivers::dots_text_display::DRIVER_NUM,
+        &memory_allocation_capability
+    );
+
     let dots_text_display = static_init!(
         drivers::dots_text_display::DotsTextDisplay<
             // 'a
@@ -644,13 +649,13 @@ pub unsafe fn main() {
             // A
             capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
         >,
-        drivers::dots_text_display::DotsTextDisplay::new(leds, virtual_alarm_dots_text_display)
+        drivers::dots_text_display::DotsTextDisplay::new(leds, virtual_alarm_dots_text_display, app_data)
     );
 
     // hook up the alarm callback to the driver
     virtual_alarm_dots_text_display.set_alarm_client(dots_text_display);
 
-    dots_text_display.set_timeout();
+    // dots_text_display.set_timeout();
 
     let microbit = MicroBit {
         ble_radio,
