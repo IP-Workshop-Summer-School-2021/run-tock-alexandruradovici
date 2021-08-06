@@ -1,33 +1,50 @@
 use kernel::hil::led::Led;
 use kernel::process::{Error, ProcessId};
 use kernel::syscall::{CommandReturn, SyscallDriver};
-use kernel::ErrorCode;
+use kernel::{debug, ErrorCode};
+use kernel::hil::time::{Alarm, AlarmClient, ConvertTicks};
 
-pub const DRIVER_NUM: usize = 0xa0001;
+pub const DRIVER_NUM: usize = 0xa0002;
 
-const DIGITS:[u32; 10] = [
+const DIGITS: [u32; 10] = [
+    // 0
     0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
-    0b11111_10011_10101_11001_11111,
+    // 1
+    0b00100_01100_00100_00100_01110,
+    // 2
+    0b11110_00001_01110_10000_11111,
+    // 3
+    0b11110_00001_11110_00001_11110,
+    // 4
+    0b10000_10000_10100_11111_00100,
+    // 5
+    0b11111_10000_11110_00001_11110,
+    // 6
+    0b11111_10000_11111_10001_11111,
+    // 7
+    0b11111_00001_00010_00100_00100,
+    // 8
+    0b11111_10001_11111_10001_11111,
+    // 9
+    0b11111_10001_11111_00001_11111,
 ];
 
-pub struct DotsDisplay<'a, L: Led> {
+pub struct DotsTextDisplay<'a, L: Led, A: Alarm<'a>> {
     leds: &'a [&'a L; 25],
+    alarm: &'a A
 }
 
-impl<'a, L: Led> DotsDisplay<'a, L> {
-    pub fn new(leds: &'a [&'a L; 25]) -> DotsDisplay<'a, L> {
+impl<'a, L: Led, A: Alarm<'a>> DotsTextDisplay<'a, L, A> {
+    pub fn new(leds: &'a [&'a L; 25], alarm: &'a A) -> DotsTextDisplay<'a, L, A> {
         // if leds.len() != 25 {
-        //     panic! ("DotsDisplay needs a slice of 25 LEDs, you supplied {}", leds.len());
+        //     panic! ("DotsTextDisplay needs a slice of 25 LEDs, you supplied {}", leds.len());
         // }
-        DotsDisplay { leds }
+
+        DotsTextDisplay { leds, alarm }
+    }
+
+    pub fn set_timeout (&self) {
+        self.alarm.set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(1000));
     }
 
     fn display (&self, digit: char) {
@@ -46,7 +63,7 @@ impl<'a, L: Led> DotsDisplay<'a, L> {
     }
 }
 
-impl<'a, L: Led> SyscallDriver for DotsDisplay<'a, L> {
+impl<'a, L: Led, A: Alarm<'a>> SyscallDriver for DotsTextDisplay<'a, L, A> {
     fn command(
         &self,
         command_num: usize,
@@ -74,5 +91,12 @@ impl<'a, L: Led> SyscallDriver for DotsDisplay<'a, L> {
 
     fn allocate_grant(&self, _process_id: ProcessId) -> Result<(), Error> {
         Ok(())
+    }
+}
+
+impl<'a, L: Led, A: Alarm<'a>> AlarmClient for DotsTextDisplay<'a, L, A> {
+    fn alarm(&self) {
+        debug! ("fired");
+        self.set_timeout();
     }
 }

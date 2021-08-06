@@ -113,13 +113,17 @@ pub struct MicroBit {
     scheduler: &'static RoundRobinSched<'static>,
     systick: cortexm4::systick::SysTick,
 
-    dots_display: &'static drivers::dots_display::DotsDisplay<
+    dots_text_display: &'static drivers::dots_text_display::DotsTextDisplay<
+        // 'a
         'static,
+        // L 
         capsules::led_matrix::LedMatrixLed<
             'static,
             nrf52::gpio::GPIOPin<'static>,
             capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52833::rtc::Rtc<'static>>,
         >,
+        // A
+        capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
     >,
 }
 
@@ -145,7 +149,7 @@ impl SyscallDriverLookup for MicroBit {
             capsules::sound_pressure::DRIVER_NUM => f(Some(self.sound_pressure)),
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
 
-            drivers::dots_display::DRIVER_NUM => f(Some(self.dots_display)),
+            drivers::dots_text_display::DRIVER_NUM => f(Some(self.dots_text_display)),
 
             _ => f(None),
         }
@@ -622,17 +626,31 @@ pub unsafe fn main() {
     let scheduler = components::sched::round_robin::RoundRobinComponent::new(&PROCESSES)
         .finalize(components::rr_component_helper!(NUM_PROCS));
 
-    let dots_display = static_init!(
-        drivers::dots_display::DotsDisplay<
+    let virtual_alarm_dots_text_display = static_init!(
+        capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52833::rtc::Rtc>,
+        capsules::virtual_alarm::VirtualMuxAlarm::new(mux_alarm)
+    );
+
+    let dots_text_display = static_init!(
+        drivers::dots_text_display::DotsTextDisplay<
+            // 'a
             'static,
+            // L
             capsules::led_matrix::LedMatrixLed<
                 'static,
                 nrf52::gpio::GPIOPin<'static>,
                 capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52833::rtc::Rtc<'static>>,
             >,
+            // A
+            capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
         >,
-        drivers::dots_display::DotsDisplay::new(leds)
+        drivers::dots_text_display::DotsTextDisplay::new(leds, virtual_alarm_dots_text_display)
     );
+
+    // hook up the alarm callback to the driver
+    virtual_alarm_dots_text_display.set_alarm_client(dots_text_display);
+
+    dots_text_display.set_timeout();
 
     let microbit = MicroBit {
         ble_radio,
@@ -655,7 +673,7 @@ pub unsafe fn main() {
             &memory_allocation_capability,
         ),
 
-        dots_display,
+        dots_text_display,
 
         scheduler,
         systick: cortexm4::systick::SysTick::new_with_calibration(64000000),
