@@ -1,11 +1,11 @@
+use core::cell::Cell;
 use kernel::hil::led::Led;
+use kernel::hil::text_screen::{TextScreen, TextScreenClient};
 use kernel::hil::time::{Alarm, AlarmClient, ConvertTicks};
 use kernel::process::{Error, ProcessId};
 use kernel::syscall::{CommandReturn, SyscallDriver};
+use kernel::utilities::cells::{OptionalCell, TakeCell};
 use kernel::ErrorCode;
-use core::cell::Cell;
-use kernel::utilities::cells::{TakeCell, OptionalCell};
-use kernel::hil::text_screen::{TextScreen, TextScreenClient};
 
 pub const DRIVER_NUM: usize = 0xa0002;
 
@@ -51,7 +51,7 @@ impl<'a, L: Led, A: Alarm<'a>> DotsTextDisplay<'a, L, A> {
     pub fn new(
         leds: &'a [&'a L; 25],
         alarm: &'a A,
-        buffer: &'static mut [u8]
+        buffer: &'static mut [u8],
     ) -> DotsTextDisplay<'a, L, A> {
         // if leds.len() != 25 {
         //     panic! ("DotsTextDisplay needs a slice of 25 LEDs, you supplied {}", leds.len());
@@ -79,14 +79,13 @@ impl<'a, L: Led, A: Alarm<'a>> DotsTextDisplay<'a, L, A> {
         self.buffer.map(|buffer| {
             if self.position.get() < buffer.len() && self.position.get() < self.print_len.get() {
                 self.display(buffer[self.position.get()] as char);
-                self.position.set (self.position.get()+1);
-            }
-            else 
-            {
-                self.position.set (0);
+                self.position.set(self.position.get() + 1);
+            } else {
+                self.position.set(0);
             }
         });
-        self.alarm.set_alarm (self.alarm.now(), self.alarm.ticks_from_ms(self.ms.get()));
+        self.alarm
+            .set_alarm(self.alarm.now(), self.alarm.ticks_from_ms(self.ms.get()));
     }
 
     fn display(&self, digit: char) {
@@ -124,16 +123,12 @@ impl<'a, L: Led, A: Alarm<'a>> SyscallDriver for DotsTextDisplay<'a, L, A> {
                 if r2 < 10_000 {
                     self.ms.set(r2 as u32);
                     CommandReturn::success()
-                }
-                else
-                {
+                } else {
                     CommandReturn::failure(ErrorCode::INVAL)
                 }
             }
             // get speed
-            2 => {
-                CommandReturn::success_u32(self.ms.get())
-            }
+            2 => CommandReturn::success_u32(self.ms.get()),
             _ => CommandReturn::failure(ErrorCode::NOSUPPORT),
         }
     }
@@ -146,31 +141,28 @@ impl<'a, L: Led, A: Alarm<'a>> SyscallDriver for DotsTextDisplay<'a, L, A> {
 impl<'a, L: Led, A: Alarm<'a>> AlarmClient for DotsTextDisplay<'a, L, A> {
     fn alarm(&self) {
         self.supplied_buffer.take().map(|buffer| {
-            self.client.map(move |client| client.write_complete (buffer, self.print_len.get(), Ok(())));
+            self.client
+                .map(move |client| client.write_complete(buffer, self.print_len.get(), Ok(())));
         });
-        if self.command_in_progress.get () {
+        if self.command_in_progress.get() {
             self.client.map(|client| client.command_complete(Ok(())));
-            self.command_in_progress.set (false);
+            self.command_in_progress.set(false);
         }
         self.display_next_digit();
     }
 }
 
-impl <'a, L: Led, A: Alarm<'a>> TextScreen<'a> for DotsTextDisplay<'a, L, A> {
+impl<'a, L: Led, A: Alarm<'a>> TextScreen<'a> for DotsTextDisplay<'a, L, A> {
     fn set_client(&self, client: Option<&'a dyn TextScreenClient>) {
         if let Some(client) = client {
             self.client.replace(client);
-        }
-        else
-        {
+        } else {
             self.client.clear();
         }
     }
 
     fn get_size(&self) -> (usize, usize) {
-        self.buffer.map_or ((0, 0), |buffer| {
-            (buffer.len(), 1)
-        })
+        self.buffer.map_or((0, 0), |buffer| (buffer.len(), 1))
     }
 
     fn print(
@@ -179,9 +171,14 @@ impl <'a, L: Led, A: Alarm<'a>> TextScreen<'a> for DotsTextDisplay<'a, L, A> {
         len: usize,
     ) -> Result<(), (ErrorCode, &'static mut [u8])> {
         if self.supplied_buffer.is_none() {
-            if self.buffer.is_some () {
-                self.buffer.map (|own_buffer| { // => context &'b mut supplied_buffer
-                    let print_len = if len < own_buffer.len() { len } else { own_buffer.len () };
+            if self.buffer.is_some() {
+                self.buffer.map(|own_buffer| {
+                    // => context &'b mut supplied_buffer
+                    let print_len = if len < own_buffer.len() {
+                        len
+                    } else {
+                        own_buffer.len()
+                    };
                     for i in 0..print_len {
                         own_buffer[i] = supplied_buffer[i]
                     }
@@ -191,14 +188,10 @@ impl <'a, L: Led, A: Alarm<'a>> TextScreen<'a> for DotsTextDisplay<'a, L, A> {
                 // self.client.map(move |client| client.write_complete(supplied_buffer, len, Ok(())));
                 self.supplied_buffer.replace(supplied_buffer);
                 Ok(())
-            }
-            else
-            {
+            } else {
                 Err((ErrorCode::NOMEM, supplied_buffer))
             }
-        }
-        else
-        {
+        } else {
             Err((ErrorCode::BUSY, supplied_buffer))
         }
     }
@@ -226,9 +219,7 @@ impl <'a, L: Led, A: Alarm<'a>> TextScreen<'a> for DotsTextDisplay<'a, L, A> {
     fn display_on(&self) -> Result<(), ErrorCode> {
         if !self.command_in_progress.get() {
             Ok(())
-        }
-        else
-        {
+        } else {
             Err(ErrorCode::BUSY)
         }
     }
@@ -242,9 +233,7 @@ impl <'a, L: Led, A: Alarm<'a>> TextScreen<'a> for DotsTextDisplay<'a, L, A> {
             self.print_len.set(0);
             self.clear();
             Ok(())
-        }
-        else
-        {
+        } else {
             Err(ErrorCode::BUSY)
         }
     }
