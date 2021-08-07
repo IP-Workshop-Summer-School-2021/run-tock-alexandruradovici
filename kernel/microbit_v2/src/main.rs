@@ -125,6 +125,8 @@ pub struct MicroBit {
         // A
         capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
     >,
+
+    text_screen: &'static capsules::text_screen::TextScreen<'static>,
 }
 
 impl SyscallDriverLookup for MicroBit {
@@ -150,6 +152,7 @@ impl SyscallDriverLookup for MicroBit {
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
 
             drivers::dots_text_display::DRIVER_NUM => f(Some(self.dots_text_display)),
+            capsules::text_screen::DRIVER_NUM => f(Some(self.text_screen)),
 
             _ => f(None),
         }
@@ -631,10 +634,7 @@ pub unsafe fn main() {
         capsules::virtual_alarm::VirtualMuxAlarm::new(mux_alarm)
     );
 
-    let app_data = board_kernel.create_grant(
-        drivers::dots_text_display::DRIVER_NUM,
-        &memory_allocation_capability
-    );
+    let text_buffer = static_init! ([u8; 50], [0; 50]);
 
     let dots_text_display = static_init!(
         drivers::dots_text_display::DotsTextDisplay<
@@ -649,11 +649,17 @@ pub unsafe fn main() {
             // A
             capsules::virtual_alarm::VirtualMuxAlarm<'static, nrf52::rtc::Rtc<'static>>,
         >,
-        drivers::dots_text_display::DotsTextDisplay::new(leds, virtual_alarm_dots_text_display, app_data)
+        drivers::dots_text_display::DotsTextDisplay::new(leds, virtual_alarm_dots_text_display, text_buffer)
     );
 
     // hook up the alarm callback to the driver
     virtual_alarm_dots_text_display.set_alarm_client(dots_text_display);
+
+    dots_text_display.init(500);
+
+    let text_screen =
+        components::text_screen::TextScreenComponent::new(board_kernel, capsules::text_screen::DRIVER_NUM, dots_text_display)
+             .finalize(components::screen_buffer_size!(50));
 
     // dots_text_display.set_timeout();
 
@@ -679,6 +685,7 @@ pub unsafe fn main() {
         ),
 
         dots_text_display,
+        text_screen,
 
         scheduler,
         systick: cortexm4::systick::SysTick::new_with_calibration(64000000),
